@@ -1,0 +1,15 @@
+openapi: 3.0.3
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /health:
+    get:
+      tags: [Operations]
+      operationId: health
+      summary: Health check
+      x-gatewaylens-public: true
+      security: []
+      responses:
+        '200':
+          description: Healthy.

@@ -1,0 +1,20 @@
+openapi: 3.0.3
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /items:
+    get:
+      tags: [Items]
+      operationId: listItems
+      summary: List items
+      responses:
+        '200':
+          description: Items returned.
+security:
+  - bearerAuth: []
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer

@@ -1,0 +1,21 @@
+openapi: 3.0.3
+info:
+  title: Security override test
+  version: 1.0.0
+security:
+  - bearerAuth: []
+paths:
+  /admin:
+    get:
+      tags: [Admin]
+      operationId: getAdmin
+      summary: Get admin data
+      security: []
+      responses:
+        '200':
+          description: Admin data returned.
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer

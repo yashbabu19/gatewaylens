@@ -1,0 +1,26 @@
+openapi: 3.0.3
+info:
+  title: Legacy Inventory API
+  version: 0.1.0
+paths:
+  /inventory:
+    get:
+      responses:
+        '404':
+          description: Inventory not found.
+    post:
+      summary: Add inventory
+      responses:
+        '200':
+          description: Inventory accepted.
+    delete:
+      summary: Delete inventory
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Health check
+      x-gatewaylens-public: true
+      security: []
+      responses:
+        '200':
+          description: Service is healthy.

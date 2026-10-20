@@ -1,0 +1,63 @@
+openapi: 3.0.3
+info:
+  title: Orders API
+  version: 1.0.0
+  description: A small example API used to demonstrate GatewayLens checks.
+servers:
+  - url: https://api.example.test/v1
+security:
+  - bearerAuth: []
+paths:
+  /orders:
+    get:
+      tags: [Orders]
+      operationId: listOrders
+      summary: List orders
+      description: Returns a page of orders visible to the authenticated caller.
+      responses:
+        '200':
+          description: Orders returned successfully.
+        '401':
+          description: Authentication is required.
+    post:
+      tags: [Orders]
+      operationId: createOrder
+      summary: Create an order
+      description: Creates an order for the authenticated caller.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sku, quantity]
+              properties:
+                sku:
+                  type: string
+                quantity:
+                  type: integer
+                  minimum: 1
+      responses:
+        '201':
+          description: Order created.
+        '400':
+          description: The request is invalid.
+        '401':
+          description: Authentication is required.
+  /health:
+    get:
+      tags: [Operations]
+      operationId: getHealth
+      summary: Health check
+      description: Reports whether the service is responding.
+      x-gatewaylens-public: true
+      security: []
+      responses:
+        '200':
+          description: Service is healthy.
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
