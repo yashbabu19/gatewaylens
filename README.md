@@ -24,8 +24,11 @@ GatewayLens starts with a small, deterministic set of checks that can run locall
 | `GL005` | Warning | An operation has no effective security requirement and is not explicitly marked public |
 | `GL006` | Info | An operation has no tags |
 | `GL007` | Error | The document contains no paths |
+| `GL008` | Error | An `operationId` is used by more than one operation |
 
 Security checks are intentionally declarative: GatewayLens detects whether a security requirement is declared in the OpenAPI document; it does **not** test authentication enforcement at runtime. An endpoint intended to be public can opt out of `GL005` using the explicit vendor extension `x-gatewaylens-public: true`. This is a GatewayLens convention, not an OpenAPI standard.
+
+`GL008` reports each operation participating in a duplicate `operationId` collision and identifies the other conflicting locations. Operation IDs are compared using exact, case-sensitive string matching. This prevents the checker from silently merging distinct names that differ only by case.
 
 ## Requirements
 
@@ -51,6 +54,14 @@ java -jar target/gatewaylens.jar examples/legacy-api.yaml --format json
 # Fail the command if any warning or error is found
 java -jar target/gatewaylens.jar examples/legacy-api.yaml --fail-on warning
 ```
+
+### Try the duplicate operationId rule
+
+```bash
+java -jar target/gatewaylens.jar src/test/resources/duplicate-operationid-openapi.yaml
+```
+
+This fixture intentionally uses `listOrders` for two different operations. GatewayLens should report `GL008` against both `GET /orders` and `GET /orders/{orderId}`. The command returns a non-zero status because the rule is an error.
 
 ### Exit codes
 
@@ -78,7 +89,7 @@ Counts depend on the rules and the exact sample file version; use `--format json
 ```text
 src/main/java/dev/gatewaylens/  # CLI, policy checker, and report model
 src/test/java/dev/gatewaylens/  # automated tests
-src/test/resources/              # valid and intentionally public API fixtures
+src/test/resources/              # valid and intentionally failing OpenAPI fixtures
 examples/                        # demo specifications
 .github/workflows/ci.yml         # Java CI workflow
 docs/rules.md                   # rule details and design choices
@@ -90,7 +101,7 @@ docs/rules.md                   # rule details and design choices
 - [x] Emit deterministic findings with IDs, severity, location, and recommendations
 - [x] Support text and JSON output plus configurable failure thresholds
 - [x] Unit tests and valid/invalid fixtures
-- [ ] Detect duplicate `operationId` values
+- [x] Detect duplicate `operationId` values (`GL008`)
 - [ ] Add a configurable policy file with allowlists and severity overrides
 - [ ] Add a SARIF report format for code-scanning workflows
 - [ ] Add Kong-specific configuration checks (separate from OpenAPI contract checks)

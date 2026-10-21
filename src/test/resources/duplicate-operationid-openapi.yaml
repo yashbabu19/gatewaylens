@@ -1,0 +1,38 @@
+openapi: 3.0.3
+info:
+  title: Duplicate operationId test API
+  version: 1.0.0
+servers:
+  - url: https://api.example.test
+paths:
+  /orders:
+    get:
+      operationId: listOrders
+      summary: List orders
+      tags: [Orders]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Orders returned successfully
+  /orders/{orderId}:
+    get:
+      operationId: listOrders
+      summary: Get one order
+      tags: [Orders]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Order returned successfully
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer

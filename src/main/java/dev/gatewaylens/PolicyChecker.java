@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 
 /** Runs the built-in static checks against an OpenAPI 3 document. */
 public final class PolicyChecker {
@@ -57,6 +58,8 @@ public final class PolicyChecker {
         }
 
         List<String> paths = api.getPaths().keySet().stream().sorted().toList();
+        checkDuplicateOperationIds(api, paths, findings);
+
         for (String path : paths) {
             PathItem pathItem = api.getPaths().get(path);
             if (pathItem == null || pathItem.readOperationsMap() == null) {
@@ -65,6 +68,45 @@ public final class PolicyChecker {
             pathItem.readOperationsMap().entrySet().stream()
                     .sorted(Map.Entry.comparingByKey(Comparator.comparing((PathItem.HttpMethod method) -> method.name())))
                     .forEach(entry -> inspectOperation(api, entry.getKey(), path, entry.getValue(), findings));
+        }
+    }
+
+    /** GL008: operationId values must uniquely identify operations across the document. */
+    private void checkDuplicateOperationIds(OpenAPI api, List<String> paths, List<Finding> findings) {
+        Map<String, List<String>> locationsByOperationId = new TreeMap<>();
+        for (String path : paths) {
+            PathItem pathItem = api.getPaths().get(path);
+            if (pathItem == null || pathItem.readOperationsMap() == null) {
+                continue;
+            }
+            pathItem.readOperationsMap().entrySet().stream()
+                    .sorted(Map.Entry.comparingByKey(Comparator.comparing((PathItem.HttpMethod method) -> method.name())))
+                    .forEach(entry -> {
+                        Operation operation = entry.getValue();
+                        if (operation == null || isBlank(operation.getOperationId())) {
+                            return;
+                        }
+                        String location = entry.getKey().name() + " " + path;
+                        locationsByOperationId.computeIfAbsent(operation.getOperationId(), ignored -> new ArrayList<>())
+                                .add(location);
+                    });
+        }
+
+        for (Map.Entry<String, List<String>> entry : locationsByOperationId.entrySet()) {
+            List<String> locations = entry.getValue();
+            if (locations.size() < 2) {
+                continue;
+            }
+            for (String location : locations) {
+                List<String> otherLocations = locations.stream()
+                        .filter(other -> !other.equals(location))
+                        .toList();
+                findings.add(new Finding(
+                        "GL008", Severity.ERROR, location,
+                        "Operation ID '" + entry.getKey() + "' is duplicated; it is also used by "
+                                + String.join(", ", otherLocations) + ".",
+                        "Assign a unique operationId to every operation. Keep IDs stable after publishing clients or tooling that depend on them."));
+            }
         }
     }
 

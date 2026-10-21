@@ -18,6 +18,7 @@ class PolicyCheckerTest {
     void cleanDocumentPassesCurrentChecks() throws Exception {
         CheckReport report = checker.check(resource("valid-openapi.yaml"));
         assertEquals(0, report.findingCount(), () -> report.findings().toString());
+        assertFalse(report.findings().stream().anyMatch(f -> f.ruleId().equals("GL008")));
     }
 
     @Test
@@ -30,6 +31,18 @@ class PolicyCheckerTest {
     void operationLevelEmptySecurityOverridesGlobalSecurity() throws Exception {
         CheckReport report = checker.check(resource("insecure-override-openapi.yaml"));
         assertTrue(report.findings().stream().anyMatch(f -> f.ruleId().equals("GL005")));
+    }
+
+    @Test
+    void duplicateOperationIdsAreReportedForEveryConflictingOperation() throws Exception {
+        CheckReport report = checker.check(resource("duplicate-operationid-openapi.yaml"));
+        var duplicates = report.findings().stream().filter(f -> f.ruleId().equals("GL008")).toList();
+
+        assertEquals(2, duplicates.size(), () -> report.findings().toString());
+        assertEquals(Set.of("GET /orders", "GET /orders/{orderId}"),
+                duplicates.stream().map(Finding::location).collect(Collectors.toSet()));
+        assertTrue(duplicates.stream().allMatch(f -> f.severity() == Severity.ERROR));
+        assertTrue(duplicates.stream().allMatch(f -> f.message().contains("listOrders")));
     }
 
     @Test
