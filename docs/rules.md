@@ -22,13 +22,25 @@ An operation can include `x-gatewaylens-public: true` to declare that it is inte
 
 GL008 groups non-blank `operationId` values across all HTTP operations in the document. When an ID is used more than once, GatewayLens emits an ERROR for each operation in the conflict and lists the other affected operation locations. Missing or blank IDs remain the responsibility of GL001. IDs are compared as declared, using exact case-sensitive string matching.
 
+## Custom policy configuration
+
+Use `--config path/to/policy.json` to tailor the built-in rule set for a repository. The configuration currently supports:
+
+- `disabledRules`: an array of rule IDs to suppress.
+- `severityOverrides`: a map of rule IDs to `ERROR`, `WARNING`, or `INFO`.
+- `ignoreOperations`: exact `METHOD /path` entries that suppress all findings for that operation.
+
+All keys are optional. Unknown keys and rule IDs, invalid severity values, and malformed operation locations are rejected with an actionable configuration error (CLI exit code `2`). Operation methods are normalized to uppercase; path matching is exact and case-sensitive. If a rule is both disabled and assigned a severity override, the disabled setting wins. Operation ignores are applied before severity overrides and suppress all findings for the matching location.
+
+The sample file is [`examples/gatewaylens-policy.json`](../examples/gatewaylens-policy.json).
+
 ## Severity and exit behavior
 
-The CLI's `--fail-on` threshold controls the process exit code, not the severity stored in a finding:
+The CLI's `--fail-on` threshold controls the process exit code, not the severity stored in a finding. Configured severity overrides are applied before evaluating that threshold:
 
 - `error`: fail if at least one ERROR is present.
 - `warning`: fail if at least one ERROR or WARNING is present.
 - `info`: fail if any finding is present.
-- `never`: always return success after producing a report, unless command or IO handling fails.
+- `never`: always return success after producing a report, unless command, config, or IO handling fails.
 
 Rule IDs should remain stable. If a rule's semantics materially change, document the change and update its tests.

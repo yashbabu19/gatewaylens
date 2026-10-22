@@ -14,7 +14,7 @@ GatewayLens starts with a small, deterministic set of checks that can run locall
 
 ## Current checks
 
-| Rule | Severity | What it checks |
+| Rule | Default severity | What it checks |
 |---|---|---|
 | `GL000` | Error | The OpenAPI document could not be parsed |
 | `GL001` | Warning | An operation is missing `operationId` |
@@ -28,7 +28,7 @@ GatewayLens starts with a small, deterministic set of checks that can run locall
 
 Security checks are intentionally declarative: GatewayLens detects whether a security requirement is declared in the OpenAPI document; it does **not** test authentication enforcement at runtime. An endpoint intended to be public can opt out of `GL005` using the explicit vendor extension `x-gatewaylens-public: true`. This is a GatewayLens convention, not an OpenAPI standard.
 
-`GL008` reports each operation participating in a duplicate `operationId` collision and identifies the other conflicting locations. Operation IDs are compared using exact, case-sensitive string matching. This prevents the checker from silently merging distinct names that differ only by case.
+`GL008` reports each operation participating in a duplicate `operationId` collision and identifies the other conflicting locations. Operation IDs are compared using exact, case-sensitive string matching.
 
 ## Requirements
 
@@ -45,7 +45,7 @@ mvn clean verify
 # Check the well-described sample API (expected to pass the current rules)
 java -jar target/gatewaylens.jar examples/orders-api.yaml
 
-# Check an intentionally incomplete API (expected to report findings and return a non-zero status)
+# Check an intentionally incomplete API (expected to report findings)
 java -jar target/gatewaylens.jar examples/legacy-api.yaml
 
 # Emit machine-readable output for automation
@@ -53,44 +53,57 @@ java -jar target/gatewaylens.jar examples/legacy-api.yaml --format json
 
 # Fail the command if any warning or error is found
 java -jar target/gatewaylens.jar examples/legacy-api.yaml --fail-on warning
+
+# Apply custom policy settings from a JSON file
+java -jar target/gatewaylens.jar examples/legacy-api.yaml --config examples/gatewaylens-policy.json
 ```
 
-### Try the duplicate operationId rule
+## Configurable policies
 
-```bash
-java -jar target/gatewaylens.jar src/test/resources/duplicate-operationid-openapi.yaml
+GatewayLens can load a JSON configuration with `--config`. With no config argument, the existing built-in behavior is unchanged.
+
+```json
+{
+  "disabledRules": ["GL006"],
+  "severityOverrides": {
+    "GL005": "ERROR",
+    "GL001": "INFO"
+  },
+  "ignoreOperations": ["POST /inventory"]
+}
 ```
 
-This fixture intentionally uses `listOrders` for two different operations. GatewayLens should report `GL008` against both `GET /orders` and `GET /orders/{orderId}`. The command returns a non-zero status because the rule is an error.
+- **`disabledRules`** removes findings produced by those rule IDs.
+- **`severityOverrides`** changes a rule's reported severity to `ERROR`, `WARNING`, or `INFO`; the CLI `--fail-on` threshold then uses that adjusted severity.
+- **`ignoreOperations`** suppresses all findings for exact `METHOD /path` locations, such as `GET /health`. HTTP methods are case-insensitive in the config; paths match exactly and remain case-sensitive.
 
-### Exit codes
+All fields are optional. Unknown fields, unknown rule IDs, invalid severity names, or malformed operation locations cause a configuration error and exit code `2` instead of silently ignoring typos. Rule IDs are validated against the supported built-in rules (`GL000`–`GL008`). Disabled rules take precedence over severity overrides, and operation ignores suppress findings regardless of rule.
+
+A sample configuration is provided at [`examples/gatewaylens-policy.json`](examples/gatewaylens-policy.json). Use it to see how a team can reduce informational noise while making missing declared security requirements release-blocking.
+
+## Exit codes
 
 - `0`: no findings reached the selected failure threshold.
 - `1`: findings reached the selected threshold.
-- `2`: command usage, input file, or report-writing error.
+- `2`: command usage, input file, policy config, or report-writing error.
 
 `--fail-on` accepts `error` (default), `warning`, `info`, or `never`.
 
-## Example output
+## Try duplicate `operationId` detection
 
-```text
-GatewayLens report — examples/legacy-api.yaml
-Findings: ... (ERROR: ..., WARNING: ..., INFO: ...)
-
-[WARNING] GL001 — GET /inventory
-  Operation is missing operationId.
-  Recommendation: Add a stable, unique operationId for code generation, tracing, and tooling.
+```bash
+java -jar target/gatewaylens.jar src/test/resources/duplicate-operationid-openapi.yaml --fail-on never
 ```
 
-Counts depend on the rules and the exact sample file version; use `--format json` for stable structured consumption.
+This fixture intentionally uses `listOrders` for two different operations. GatewayLens should report `GL008` against both `GET /orders` and `GET /orders/{orderId}`.
 
 ## Project layout
 
 ```text
-src/main/java/dev/gatewaylens/  # CLI, policy checker, and report model
+src/main/java/dev/gatewaylens/  # CLI, policy config, checker, report model
 src/test/java/dev/gatewaylens/  # automated tests
 src/test/resources/              # valid and intentionally failing OpenAPI fixtures
-examples/                        # demo specifications
+examples/                        # demo specifications and sample policy config
 .github/workflows/ci.yml         # Java CI workflow
 docs/rules.md                   # rule details and design choices
 ```
@@ -102,7 +115,7 @@ docs/rules.md                   # rule details and design choices
 - [x] Support text and JSON output plus configurable failure thresholds
 - [x] Unit tests and valid/invalid fixtures
 - [x] Detect duplicate `operationId` values (`GL008`)
-- [ ] Add a configurable policy file with allowlists and severity overrides
+- [x] Load optional JSON policy config with disabled rules, severity overrides, and operation ignores
 - [ ] Add a SARIF report format for code-scanning workflows
 - [ ] Add Kong-specific configuration checks (separate from OpenAPI contract checks)
 - [ ] Add a GitHub Actions usage example against a sample API repository
@@ -111,7 +124,7 @@ docs/rules.md                   # rule details and design choices
 ## Design principles
 
 - **Fail clearly:** each finding has a stable rule ID, severity, location, and remediation.
-- **Deterministic:** the same document should produce the same finding order.
+- **Deterministic:** the same document and policy should produce the same finding order.
 - **Explicit public APIs:** public routes should be marked intentionally, rather than silently exempted.
 - **Test the rules:** positive, negative, and edge cases belong in tests.
 - **Safe examples:** fixtures use synthetic paths and data only.

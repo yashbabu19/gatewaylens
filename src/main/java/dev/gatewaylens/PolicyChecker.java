@@ -18,6 +18,10 @@ public final class PolicyChecker {
     public static final String PUBLIC_EXTENSION = "x-gatewaylens-public";
 
     public CheckReport check(Path input) {
+        return check(input, PolicyConfig.defaults());
+    }
+
+    public CheckReport check(Path input, PolicyConfig policy) {
         List<Finding> findings = new ArrayList<>();
         final SwaggerParseResult parsed;
         try {
@@ -27,7 +31,7 @@ public final class PolicyChecker {
                     "GL000", Severity.ERROR, input.toString(),
                     "Could not read or parse the OpenAPI document: " + safeMessage(exception),
                     "Confirm the file exists and contains a valid OpenAPI 3.0 or 3.1 document."));
-            return CheckReport.of(input.toString(), findings);
+            return createReport(input, findings, policy);
         }
 
         if (parsed == null || parsed.getOpenAPI() == null) {
@@ -39,14 +43,19 @@ public final class PolicyChecker {
                     "GL000", Severity.ERROR, input.toString(),
                     "Could not parse the OpenAPI document." + detail,
                     "Fix the parser errors and rerun GatewayLens."));
-            return CheckReport.of(input.toString(), findings);
+            return createReport(input, findings, policy);
         }
 
         inspect(parsed.getOpenAPI(), findings);
-        findings.sort(Comparator.comparing(Finding::location)
+        return createReport(input, findings, policy);
+    }
+
+    private CheckReport createReport(Path input, List<Finding> findings, PolicyConfig policy) {
+        List<Finding> adjusted = policy.apply(findings);
+        adjusted.sort(Comparator.comparing(Finding::location)
                 .thenComparing(Finding::ruleId)
                 .thenComparing(f -> f.severity().name()));
-        return CheckReport.of(input.toString(), findings);
+        return CheckReport.of(input.toString(), adjusted);
     }
 
     private void inspect(OpenAPI api, List<Finding> findings) {

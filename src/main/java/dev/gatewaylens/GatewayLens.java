@@ -3,6 +3,7 @@ package dev.gatewaylens;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 
+import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -28,6 +29,7 @@ public final class GatewayLens {
         }
 
         Path file = null;
+        Path configFile = null;
         String format = "text";
         String failOn = "error";
         List<String> values = new ArrayList<>(List.of(args));
@@ -47,6 +49,13 @@ public final class GatewayLens {
                     return 2;
                 }
                 failOn = values.get(++i).toLowerCase(Locale.ROOT);
+            } else if (value.equals("--config")) {
+                if (i + 1 >= values.size()) {
+                    err.println("Missing value for --config.");
+                    printUsage(err);
+                    return 2;
+                }
+                configFile = Path.of(values.get(++i));
             } else if (value.startsWith("--")) {
                 err.println("Unknown option: " + value);
                 printUsage(err);
@@ -62,7 +71,7 @@ public final class GatewayLens {
 
         if (file == null || !List.of("text", "json").contains(format)
                 || !List.of("error", "warning", "info", "never").contains(failOn)) {
-            err.println("Provide one input file, --format text|json, and --fail-on error|warning|info|never.");
+            err.println("Provide one input file, --format text|json, --fail-on error|warning|info|never, and optionally --config policy.json.");
             printUsage(err);
             return 2;
         }
@@ -71,7 +80,15 @@ public final class GatewayLens {
             return 2;
         }
 
-        CheckReport report = new PolicyChecker().check(file);
+        final PolicyConfig policy;
+        try {
+            policy = configFile == null ? PolicyConfig.defaults() : PolicyConfig.load(configFile);
+        } catch (IOException | IllegalArgumentException exception) {
+            err.println("Could not load policy configuration: " + exception.getMessage());
+            return 2;
+        }
+
+        CheckReport report = new PolicyChecker().check(file, policy);
         try {
             if (format.equals("json")) {
                 out.println(JSON.writeValueAsString(report));
@@ -124,6 +141,7 @@ public final class GatewayLens {
         out.println("GatewayLens — check an OpenAPI contract before gateway onboarding");
         out.println("Usage: java -jar target/gatewaylens.jar <openapi.yaml|openapi.json> [options]");
         out.println("Options:");
+        out.println("  --config <policy.json>      Optional policy configuration file");
         out.println("  --format text|json          Report format (default: text)");
         out.println("  --fail-on error|warning|info|never  Failure threshold (default: error)");
         out.println("  --help                       Show this help");

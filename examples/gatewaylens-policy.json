@@ -1,0 +1,12 @@
+{
+  "disabledRules": [
+    "GL006"
+  ],
+  "severityOverrides": {
+    "GL005": "ERROR",
+    "GL001": "INFO"
+  },
+  "ignoreOperations": [
+    "POST /inventory"
+  ]
+}
