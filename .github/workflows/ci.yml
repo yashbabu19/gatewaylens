@@ -22,3 +22,22 @@ jobs:
           cache: maven
       - name: Verify and package
         run: mvn --batch-mode --no-transfer-progress clean verify
+
+  kong-schema:
+    name: Validate Kong config with decK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Install pinned decK version
+        env:
+          DECK_VERSION: '1.68.0'
+        run: |
+          curl --fail --location --silent --show-error \
+            "https://github.com/Kong/deck/releases/download/v${DECK_VERSION}/deck_${DECK_VERSION}_linux_amd64.tar.gz" \
+            --output "${RUNNER_TEMP}/deck.tar.gz"
+          tar -xzf "${RUNNER_TEMP}/deck.tar.gz" -C "${RUNNER_TEMP}"
+          sudo install -m 0755 "${RUNNER_TEMP}/deck" /usr/local/bin/deck
+          deck version
+      - name: Validate valid Kong declarative config against decK schemas
+        run: deck file validate examples/kong-declarative.yaml

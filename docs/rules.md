@@ -35,7 +35,17 @@ Select this checker with `--type kong`. The current implementation recognizes th
 | KG008 | ERROR | Duplicate service name | Reports every service participating in a name collision. |
 | KG009 | ERROR | Duplicate route name | Reports every route participating in a name collision, including nested and top-level routes. |
 
-Kong's declarative format stores entities such as services and routes as collections. Services represent upstream applications; routes define request-matching criteria and normally associate with a service. GatewayLens checks for common onboarding mistakes but does not prove Kong will accept a config.
+Kong's declarative format stores entities such as services and routes as collections. Services represent upstream applications; routes define request-matching criteria and normally associate with a service. GatewayLens checks common onboarding mistakes but does not prove Kong will accept a config.
+
+## Official Kong schema validation
+
+For validation against static schemas and entity relationships supported by decK, run:
+
+```bash
+deck file validate examples/kong-declarative.yaml
+```
+
+This is an offline check and does not contact a live gateway. GatewayLens and decK serve different purposes: GatewayLens reports opinionated onboarding checks; decK checks its supported declarative state schema and relationships. CI pins a decK version to keep validation reproducible.
 
 ## OpenAPI policy configuration
 

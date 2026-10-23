@@ -23,7 +23,7 @@ GatewayLens provides deterministic checks that can run locally or in CI. OpenAPI
 | `GL004` | Warning | An operation has no documented 2xx success response |
 | `GL005` | Warning | An operation has no effective security requirement and is not explicitly marked public |
 | `GL006` | Info | An operation has no tags |
-| `GL007` | Error | The document contains no paths |
+| `GL007` | Error | An OpenAPI document has no paths |
 | `GL008` | Error | An `operationId` is used by more than one operation |
 
 Security checks are declarative: they detect whether a security requirement is specified in OpenAPI, not whether authentication is enforced at runtime. `x-gatewaylens-public: true` is an opt-out convention for GL005, not an OpenAPI standard. GL008 reports each operation participating in a duplicate `operationId` collision.
@@ -52,6 +52,7 @@ These are opinionated static checks, not full validation against Kong's schema: 
 - Java 21+
 - Maven 3.9+
 - Internet access on the first build so Maven can download dependencies
+- Optional: decK CLI for official offline Kong declarative-schema validation
 
 ## Run it
 
@@ -96,13 +97,37 @@ GatewayLens can load a JSON configuration with `--config`. With no config argume
 
 All fields are optional. Unknown fields/rules, invalid severities, and malformed operation locations result in a configuration error (exit code `2`). OpenAPI policy configuration cannot currently be combined with `--type kong`.
 
+## Official Kong schema validation with decK
+
+GatewayLens's Kong rules are complementary onboarding checks, not a full Kong schema implementation. For schema and entity-relationship validation supported by the installed decK version, use decK's offline `file validate` command. It does not contact a live gateway. See [Kong's official decK validation docs](https://developer.konghq.com/deck/file/validate/) and [decK installation instructions](https://developer.konghq.com/deck/).
+
+After installing decK, run from the repository root:
+
+```bash
+# Validate the known-good declarative sample with official decK checks
+scripts/validate-kong-with-deck.sh
+
+# Or call decK directly
+deck file validate examples/kong-declarative.yaml
+```
+
+A separate `kong-schema` GitHub Actions job pins decK `v1.68.0` and validates the known-good sample on pushes and pull requests. This helps catch incompatibilities that GatewayLens's own rules intentionally do not attempt to duplicate. The invalid example is designed to demonstrate GatewayLens findings and is not expected to pass schema validation.
+
 ## Exit codes
 
 - `0`: no findings reached the selected failure threshold.
 - `1`: findings reached the selected threshold.
 - `2`: command usage, input file, configuration, or report-writing error.
 
-`--fail-on` accepts `error` (default), `warning`, `info`, or `never`.
+`--fail-on` accepts `error`, `warning`, `info`, or `never`.
+
+## Try duplicate `operationId` detection
+
+```bash
+java -jar target/gatewaylens.jar src/test/resources/duplicate-operationid-openapi.yaml --fail-on never
+```
+
+This fixture intentionally uses `listOrders` for two different operations. GatewayLens should report `GL008` against both `GET /orders` and `GET /orders/{orderId}`.
 
 ## Project layout
 
@@ -111,7 +136,8 @@ src/main/java/dev/gatewaylens/  # CLI, policy config, OpenAPI and Kong checkers
 src/test/java/dev/gatewaylens/  # automated tests
 src/test/resources/              # OpenAPI test fixtures
 examples/                        # demo OpenAPI/Kong specs and sample policy config
-.github/workflows/ci.yml         # Java CI workflow
+scripts/                         # optional validation helpers
+.github/workflows/ci.yml         # Java CI and decK validation
 docs/rules.md                   # rule details and design choices
 ```
 
@@ -123,7 +149,7 @@ docs/rules.md                   # rule details and design choices
 - [x] Duplicate `operationId` detection (`GL008`)
 - [x] JSON policy configuration for OpenAPI rules
 - [x] Initial Kong declarative YAML/JSON static checks
-- [ ] Validate against versioned Kong schemas / decK
+- [x] Official decK offline validation for the known-good Kong sample in CI
 - [ ] Add plugin-specific security and traffic-policy checks
 - [ ] Add SARIF output for code-scanning workflows
 - [ ] Add GitHub Actions examples for external API repositories
@@ -134,6 +160,7 @@ docs/rules.md                   # rule details and design choices
 - [Kong declarative configuration](https://docs.konghq.com/gateway/latest/admin-api/declarative-configuration/)
 - [Kong DB-less declarative configuration](https://docs.konghq.com/gateway/latest/production/deployment-topologies/db-less-and-declarative-config/)
 - [Kong services and routes](https://docs.konghq.com/gateway/latest/get-started/services-and-routes/)
+- [decK file validation](https://developer.konghq.com/deck/file/validate/)
 - [OpenAPI Specification](https://github.com/OAI/OpenAPI-Specification)
 - [Swagger Parser](https://github.com/swagger-api/swagger-parser)
 
