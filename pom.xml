@@ -2,14 +2,12 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
-
     <groupId>dev.gatewaylens</groupId>
     <artifactId>gatewaylens</artifactId>
     <version>0.1.0</version>
     <name>GatewayLens</name>
     <description>A developer-first linter for OpenAPI contracts and gateway policy readiness.</description>
     <url>https://github.com/yashbabu19/gatewaylens</url>
-
     <properties>
         <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -17,7 +15,6 @@
         <jackson.version>2.22.0</jackson.version>
         <junit.version>5.12.2</junit.version>
     </properties>
-
     <dependencies>
         <dependency>
             <groupId>io.swagger.parser.v3</groupId>
@@ -30,13 +27,17 @@
             <version>${jackson.version}</version>
         </dependency>
         <dependency>
+            <groupId>com.fasterxml.jackson.dataformat</groupId>
+            <artifactId>jackson-dataformat-yaml</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+        <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
             <version>${junit.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
-
     <build>
         <finalName>gatewaylens</finalName>
         <plugins>

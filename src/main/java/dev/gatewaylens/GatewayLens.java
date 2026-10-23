@@ -30,6 +30,7 @@ public final class GatewayLens {
 
         Path file = null;
         Path configFile = null;
+        String type = "openapi";
         String format = "text";
         String failOn = "error";
         List<String> values = new ArrayList<>(List.of(args));
@@ -56,6 +57,13 @@ public final class GatewayLens {
                     return 2;
                 }
                 configFile = Path.of(values.get(++i));
+            } else if (value.equals("--type")) {
+                if (i + 1 >= values.size()) {
+                    err.println("Missing value for --type.");
+                    printUsage(err);
+                    return 2;
+                }
+                type = values.get(++i).toLowerCase(Locale.ROOT);
             } else if (value.startsWith("--")) {
                 err.println("Unknown option: " + value);
                 printUsage(err);
@@ -70,8 +78,9 @@ public final class GatewayLens {
         }
 
         if (file == null || !List.of("text", "json").contains(format)
-                || !List.of("error", "warning", "info", "never").contains(failOn)) {
-            err.println("Provide one input file, --format text|json, --fail-on error|warning|info|never, and optionally --config policy.json.");
+                || !List.of("error", "warning", "info", "never").contains(failOn)
+                || !List.of("openapi", "kong").contains(type)) {
+            err.println("Provide one input file, --type openapi|kong, --format text|json, --fail-on error|warning|info|never, and optionally --config policy.json.");
             printUsage(err);
             return 2;
         }
@@ -80,15 +89,24 @@ public final class GatewayLens {
             return 2;
         }
 
-        final PolicyConfig policy;
-        try {
-            policy = configFile == null ? PolicyConfig.defaults() : PolicyConfig.load(configFile);
-        } catch (IOException | IllegalArgumentException exception) {
-            err.println("Could not load policy configuration: " + exception.getMessage());
-            return 2;
+        final CheckReport report;
+        if (type.equals("kong")) {
+            if (configFile != null) {
+                err.println("--config currently applies only to OpenAPI checks. Omit --config when using --type kong.");
+                return 2;
+            }
+            report = new KongConfigChecker().check(file);
+        } else {
+            final PolicyConfig policy;
+            try {
+                policy = configFile == null ? PolicyConfig.defaults() : PolicyConfig.load(configFile);
+            } catch (IOException | IllegalArgumentException exception) {
+                err.println("Could not load policy configuration: " + exception.getMessage());
+                return 2;
+            }
+            report = new PolicyChecker().check(file, policy);
         }
 
-        CheckReport report = new PolicyChecker().check(file, policy);
         try {
             if (format.equals("json")) {
                 out.println(JSON.writeValueAsString(report));
@@ -138,12 +156,13 @@ public final class GatewayLens {
     }
 
     private static void printUsage(PrintStream out) {
-        out.println("GatewayLens — check an OpenAPI contract before gateway onboarding");
-        out.println("Usage: java -jar target/gatewaylens.jar <openapi.yaml|openapi.json> [options]");
+        out.println("GatewayLens — check OpenAPI contracts or Kong declarative configuration");
+        out.println("Usage: java -jar target/gatewaylens.jar <input.yaml|input.json> [options]");
         out.println("Options:");
-        out.println("  --config <policy.json>      Optional policy configuration file");
-        out.println("  --format text|json          Report format (default: text)");
+        out.println("  --type openapi|kong          Input type (default: openapi)");
+        out.println("  --config <policy.json>       Optional OpenAPI policy configuration");
+        out.println("  --format text|json           Report format (default: text)");
         out.println("  --fail-on error|warning|info|never  Failure threshold (default: error)");
-        out.println("  --help                       Show this help");
+        out.println("  --help                        Show this help");
     }
 }

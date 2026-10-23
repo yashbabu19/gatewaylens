@@ -2,17 +2,17 @@
 
 **A developer-first linter for OpenAPI contracts and API-gateway onboarding readiness.**
 
-GatewayLens checks API descriptions before they enter a gateway onboarding or deployment workflow. It highlights contract gaps and operations with no declared security requirement, then produces actionable findings in terminal-friendly text or JSON for CI pipelines.
+GatewayLens checks API descriptions before they enter a gateway onboarding or deployment workflow. It highlights contract gaps and operations with no declared security requirement, and it can statically inspect Kong declarative configuration for common onboarding mistakes. Reports are available as terminal-friendly text or JSON for CI pipelines.
 
-> **Project status:** early MVP. This is a static OpenAPI checker, not an API gateway, runtime security control, or replacement for security review. Passing these checks does not prove an API is secure.
+> **Project status:** early MVP. This is a static configuration checker, not an API gateway, runtime security control, or replacement for review against the installed Kong version. Passing its checks does not prove an API or gateway is secure or that Kong will accept every possible configuration.
 
 ## Why build this?
 
-Gateway onboarding often repeats the same questions: Are operations documented? Are success and failure responses declared? Is security behavior intentional? Can a reviewer get a consistent, machine-readable report before a change moves forward?
+Gateway onboarding repeats the same questions: Are operations documented? Are success and failure responses declared? Is security behavior intentional? Do routes have request-matching criteria and point at a declared service? Can a reviewer get a consistent report before a change moves forward?
 
-GatewayLens starts with a small, deterministic set of checks that can run locally or in CI. The plan is to add gateway-specific policy packs after the core checker and tests are solid.
+GatewayLens provides deterministic checks that can run locally or in CI. OpenAPI checks and Kong declarative-config checks are separate modes.
 
-## Current checks
+## OpenAPI checks
 
 | Rule | Default severity | What it checks |
 |---|---|---|
@@ -26,9 +26,26 @@ GatewayLens starts with a small, deterministic set of checks that can run locall
 | `GL007` | Error | The document contains no paths |
 | `GL008` | Error | An `operationId` is used by more than one operation |
 
-Security checks are intentionally declarative: GatewayLens detects whether a security requirement is declared in the OpenAPI document; it does **not** test authentication enforcement at runtime. An endpoint intended to be public can opt out of `GL005` using the explicit vendor extension `x-gatewaylens-public: true`. This is a GatewayLens convention, not an OpenAPI standard.
+Security checks are declarative: they detect whether a security requirement is specified in OpenAPI, not whether authentication is enforced at runtime. `x-gatewaylens-public: true` is an opt-out convention for GL005, not an OpenAPI standard. GL008 reports each operation participating in a duplicate `operationId` collision.
 
-`GL008` reports each operation participating in a duplicate `operationId` collision and identifies the other conflicting locations. Operation IDs are compared using exact, case-sensitive string matching.
+## Kong declarative configuration checks
+
+Run with `--type kong`. The Kong mode reads declarative YAML or JSON and applies these initial checks:
+
+| Rule | Default severity | What it checks |
+|---|---|---|
+| `KG000` | Error | Input cannot be parsed or an entity collection/entry has an invalid basic shape |
+| `KG001` | Error | Missing `_format_version` |
+| `KG002` | Error | Format version is outside this rule set's supported values (`1.1`, `2.1`, `3.0`) |
+| `KG003` | Error | A service is missing its name |
+| `KG004` | Error | A service declares neither `url` nor `host` as an upstream target |
+| `KG005` | Error | A route is missing its name |
+| `KG006` | Error | A route has no recognized request-matching criterion |
+| `KG007` | Error | A top-level route has no declared service association or references an undeclared service |
+| `KG008` | Error | Duplicate service names |
+| `KG009` | Error | Duplicate route names |
+
+These are opinionated static checks, not full validation against Kong's schema: custom entities/plugins and additional version-specific semantics may require Kong or decK itself to validate. Nested routes under a service inherit that association; top-level routes must declare a service reference.
 
 ## Requirements
 
@@ -42,23 +59,23 @@ Security checks are intentionally declarative: GatewayLens detects whether a sec
 # Run the test suite and package the executable JAR
 mvn clean verify
 
-# Check the well-described sample API (expected to pass the current rules)
+# Check an OpenAPI contract (default mode)
 java -jar target/gatewaylens.jar examples/orders-api.yaml
 
-# Check an intentionally incomplete API (expected to report findings)
-java -jar target/gatewaylens.jar examples/legacy-api.yaml
-
-# Emit machine-readable output for automation
-java -jar target/gatewaylens.jar examples/legacy-api.yaml --format json
-
-# Fail the command if any warning or error is found
-java -jar target/gatewaylens.jar examples/legacy-api.yaml --fail-on warning
-
-# Apply custom policy settings from a JSON file
+# Apply custom OpenAPI policy settings
 java -jar target/gatewaylens.jar examples/legacy-api.yaml --config examples/gatewaylens-policy.json
+
+# Check a Kong declarative configuration
+java -jar target/gatewaylens.jar examples/kong-declarative.yaml --type kong
+
+# Check an intentionally invalid Kong config (findings expected)
+java -jar target/gatewaylens.jar examples/kong-invalid.yaml --type kong --fail-on never
+
+# Emit machine-readable output
+java -jar target/gatewaylens.jar examples/kong-invalid.yaml --type kong --format json --fail-on never
 ```
 
-## Configurable policies
+## Configurable OpenAPI policies
 
 GatewayLens can load a JSON configuration with `--config`. With no config argument, the existing built-in behavior is unchanged.
 
@@ -73,37 +90,27 @@ GatewayLens can load a JSON configuration with `--config`. With no config argume
 }
 ```
 
-- **`disabledRules`** removes findings produced by those rule IDs.
-- **`severityOverrides`** changes a rule's reported severity to `ERROR`, `WARNING`, or `INFO`; the CLI `--fail-on` threshold then uses that adjusted severity.
-- **`ignoreOperations`** suppresses all findings for exact `METHOD /path` locations, such as `GET /health`. HTTP methods are case-insensitive in the config; paths match exactly and remain case-sensitive.
+- `disabledRules` suppresses findings for specified rule IDs.
+- `severityOverrides` changes reported severity to `ERROR`, `WARNING`, or `INFO`.
+- `ignoreOperations` suppresses findings for exact `METHOD /path` entries.
 
-All fields are optional. Unknown fields, unknown rule IDs, invalid severity names, or malformed operation locations cause a configuration error and exit code `2` instead of silently ignoring typos. Rule IDs are validated against the supported built-in rules (`GL000`–`GL008`). Disabled rules take precedence over severity overrides, and operation ignores suppress findings regardless of rule.
-
-A sample configuration is provided at [`examples/gatewaylens-policy.json`](examples/gatewaylens-policy.json). Use it to see how a team can reduce informational noise while making missing declared security requirements release-blocking.
+All fields are optional. Unknown fields/rules, invalid severities, and malformed operation locations result in a configuration error (exit code `2`). OpenAPI policy configuration cannot currently be combined with `--type kong`.
 
 ## Exit codes
 
 - `0`: no findings reached the selected failure threshold.
 - `1`: findings reached the selected threshold.
-- `2`: command usage, input file, policy config, or report-writing error.
+- `2`: command usage, input file, configuration, or report-writing error.
 
 `--fail-on` accepts `error` (default), `warning`, `info`, or `never`.
-
-## Try duplicate `operationId` detection
-
-```bash
-java -jar target/gatewaylens.jar src/test/resources/duplicate-operationid-openapi.yaml --fail-on never
-```
-
-This fixture intentionally uses `listOrders` for two different operations. GatewayLens should report `GL008` against both `GET /orders` and `GET /orders/{orderId}`.
 
 ## Project layout
 
 ```text
-src/main/java/dev/gatewaylens/  # CLI, policy config, checker, report model
+src/main/java/dev/gatewaylens/  # CLI, policy config, OpenAPI and Kong checkers
 src/test/java/dev/gatewaylens/  # automated tests
-src/test/resources/              # valid and intentionally failing OpenAPI fixtures
-examples/                        # demo specifications and sample policy config
+src/test/resources/              # OpenAPI test fixtures
+examples/                        # demo OpenAPI/Kong specs and sample policy config
 .github/workflows/ci.yml         # Java CI workflow
 docs/rules.md                   # rule details and design choices
 ```
@@ -111,34 +118,28 @@ docs/rules.md                   # rule details and design choices
 ## Roadmap
 
 - [x] Parse OpenAPI 3.x YAML/JSON using Swagger Parser
-- [x] Emit deterministic findings with IDs, severity, location, and recommendations
-- [x] Support text and JSON output plus configurable failure thresholds
-- [x] Unit tests and valid/invalid fixtures
-- [x] Detect duplicate `operationId` values (`GL008`)
-- [x] Load optional JSON policy config with disabled rules, severity overrides, and operation ignores
-- [ ] Add a SARIF report format for code-scanning workflows
-- [ ] Add Kong-specific configuration checks (separate from OpenAPI contract checks)
-- [ ] Add a GitHub Actions usage example against a sample API repository
+- [x] Deterministic findings with rule IDs, severity, locations, and remediation
+- [x] Text/JSON output and configurable failure thresholds
+- [x] Duplicate `operationId` detection (`GL008`)
+- [x] JSON policy configuration for OpenAPI rules
+- [x] Initial Kong declarative YAML/JSON static checks
+- [ ] Validate against versioned Kong schemas / decK
+- [ ] Add plugin-specific security and traffic-policy checks
+- [ ] Add SARIF output for code-scanning workflows
+- [ ] Add GitHub Actions examples for external API repositories
 - [ ] Document threat model, limitations, and rule versioning
-
-## Design principles
-
-- **Fail clearly:** each finding has a stable rule ID, severity, location, and remediation.
-- **Deterministic:** the same document and policy should produce the same finding order.
-- **Explicit public APIs:** public routes should be marked intentionally, rather than silently exempted.
-- **Test the rules:** positive, negative, and edge cases belong in tests.
-- **Safe examples:** fixtures use synthetic paths and data only.
 
 ## References
 
+- [Kong declarative configuration](https://docs.konghq.com/gateway/latest/admin-api/declarative-configuration/)
+- [Kong DB-less declarative configuration](https://docs.konghq.com/gateway/latest/production/deployment-topologies/db-less-and-declarative-config/)
+- [Kong services and routes](https://docs.konghq.com/gateway/latest/get-started/services-and-routes/)
 - [OpenAPI Specification](https://github.com/OAI/OpenAPI-Specification)
 - [Swagger Parser](https://github.com/swagger-api/swagger-parser)
-- [Kong Gateway](https://github.com/Kong/kong)
-- [Spring Cloud Gateway](https://github.com/spring-cloud/spring-cloud-gateway)
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). For a first contribution, add a rule with a focused test fixture and explain false-positive trade-offs in the pull request.
+See [CONTRIBUTING.md](CONTRIBUTING.md). For a first contribution, add a focused rule test and discuss false-positive trade-offs in the pull request.
 
 ## License
 

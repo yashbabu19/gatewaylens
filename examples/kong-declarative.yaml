@@ -1,0 +1,23 @@
+_format_version: "3.0"
+_transform: true
+
+services:
+  - name: orders-api
+    url: https://orders.example.test
+    routes:
+      - name: orders-route
+        paths:
+          - /orders
+        methods:
+          - GET
+          - POST
+
+  - name: catalog-api
+    url: https://catalog.example.test
+
+routes:
+  - name: catalog-route
+    paths:
+      - /catalog
+    service:
+      name: catalog-api

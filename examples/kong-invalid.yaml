@@ -1,0 +1,23 @@
+# Intentionally invalid configuration for GatewayLens rule demonstrations.
+services:
+  - name: orders-api
+    url: https://orders.example.test
+  - name: orders-api
+    # Missing both url and host on purpose.
+  - name: no-target
+  - url: https://unnamed.example.test
+
+routes:
+  - name: duplicated-route
+    # Missing matching criteria and references a non-existent service.
+    service:
+      name: missing-service
+  - name: duplicated-route
+    paths:
+      - /orphan
+    service:
+      name: missing-service
+  - paths:
+      - /unnamed
+    service:
+      name: orders-api
